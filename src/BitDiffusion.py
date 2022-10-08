@@ -22,6 +22,8 @@ from ema_pytorch import EMA
 
 from accelerate import Accelerator
 
+import numpy as np
+
 BITS = 8
 
 from .utils import *
