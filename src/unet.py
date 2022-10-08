@@ -22,43 +22,11 @@ from ema_pytorch import EMA
 
 from accelerate import Accelerator
 
+from .utils import *
+
 # constants
 
 BITS = 8
-
-# helpers functions
-
-def exists(x):
-    return x is not None
-
-def default(val, d):
-    if exists(val):
-        return val
-    return d() if callable(d) else d
-
-def cycle(dl):
-    while True:
-        for data in dl:
-            yield data
-
-def has_int_squareroot(num):
-    return (math.sqrt(num) ** 2) == num
-
-def num_to_groups(num, divisor):
-    groups = num // divisor
-    remainder = num % divisor
-    arr = [divisor] * groups
-    if remainder > 0:
-        arr.append(remainder)
-    return arr
-
-def convert_image_to(img_type, image):
-    if image.mode != img_type:
-        return image.convert(img_type)
-    return image
-
-def l2norm(t):
-    return F.normalize(t, dim = -1)
 
 # small helper modules
 
