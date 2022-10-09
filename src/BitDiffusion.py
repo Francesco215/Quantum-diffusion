@@ -5,8 +5,6 @@ from torch import nn
 
 from tqdm.auto import tqdm
 
-import numpy as np
-
 BITS = 8
 
 from .utils import *
@@ -17,35 +15,33 @@ class BitDiffusion(nn.Module):
     def __init__(
         self,
         model,
-        *,
+        *, #ma a che serve sto asterisco?
         image_size,
         timesteps = 1000,
-        use_ddim = False,
-        noise_schedule = 'cosine',
+        d_step='ddpm_step',
         time_difference = 0.,
-        bit_scale = 1.
+        bit_scale = 1.,
+        collapsing=True
     ):
         super().__init__()
         self.model = model
         self.channels = self.model.channels
-
         self.image_size = image_size
-
-        if noise_schedule == "linear":
-            self.log_snr = beta_linear_log_snr
-        elif noise_schedule == "cosine":
-            self.log_snr = alpha_cosine_log_snr
-        else:
-            raise ValueError(f'invalid noise schedule {noise_schedule}')
-
         self.bit_scale = bit_scale
-
         self.timesteps = timesteps
-        self.use_ddim = use_ddim
+        self.collapsing=collapsing
+       
+       #choose the type of diffusion step
+        if d_step=='ddpm':
+            self.d_step = ddpm_step
+        elif d_step=='ddim':
+            self.d_step = ddim_step
+        else: 
+            raise ValueError(f'd_step must be ddpm or ddim, you passed "{d_step}"')
+
 
         # proposed in the paper, summed to time_next
         # as a way to fix a deficiency in self-conditioning and lower FID when the number of sampling timesteps is < 400
-
         self.time_difference = time_difference
 
     @property
@@ -54,28 +50,20 @@ class BitDiffusion(nn.Module):
 
 
     @torch.no_grad()
-    def ddim_sample(self, shape, time_difference = None):
-        batch, device = shape[0], self.device
+    def sample(self, shape):
 
-        time_difference = default(time_difference, self.time_difference)
-
-        times= torch.linspace(1., 0., self.timesteps + 1, device = device)
-
-        img = torch.randn(shape, device = device)
-
-        x_start = None
+        times= torch.linspace(1., 0., self.timesteps + 1, device = self.device)
+        x = torch.randn(shape, device = self.device)
 
         for i in range in tqdm(len(times)-1, desc = 'sampling loop time step'):
 
-            x_start=ddim_step(img, times[i], times[i + 1])  #TODO: add self conditioning
+            x=self.d_step(x, times[i], times[i + 1])  #TODO: add self conditioning
+            
+            if self.collapsing:
+                x=qubit_collapse(x)
 
-        return qubit_to_decimal(x_start)
+        return qubit_to_decimal(x)
 
-    @torch.no_grad()
-    def sample(self, batch_size = 16):
-        image_size, channels = self.image_size, self.channels
-        sample_fn = self.ddpm_sample if not self.use_ddim else self.ddim_sample
-        return sample_fn((batch_size, channels, image_size, image_size))
 
     def forward(self, img, *args, **kwargs):
         batch, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
@@ -165,18 +153,15 @@ class BitDiffusion(nn.Module):
 
 
 #Utils for diffusion
-
-
-
-def ddim_step(x_t, t_now, t_next, model, conditioning=None):
+def ddim_step(x, t_now, t_next, model, collapsing=True, conditioning=None):
     """
-        A single step of diffusion denoising implicit model
+        A single step of diffusion denoising probabilistic model
         args:
-            x_t: the target
-            x_pred: the prediction
+            x_t: the image
             t_now: the current time step
             t_next: the next time step
-
+            collapsing: if True, the wavefunction collapses at each step
+            conditioning: if not None, the conditioning tensor (aka. the previous prediction)
         returns:
             the next prediction
     """
@@ -186,25 +171,26 @@ def ddim_step(x_t, t_now, t_next, model, conditioning=None):
     gamma_next = gamma_t(t_next)
 
     #prediction of the target
-    x_pred = model(x_t, gamma_now, conditioning)
+    x_pred = model(x, gamma_now, conditioning)
 
     #error
-    eps= (x_t-torch.sqrt(gamma_now)*x_pred)/torch.sqrt(1-gamma_now)
+    eps= (x-torch.sqrt(gamma_now)*x_pred)/torch.sqrt(1-gamma_now)
 
     #update
-    x_next=x_t-torch.sqrt(1-gamma_next)*eps
+    x_next=x-torch.sqrt(1-gamma_next)*eps
 
     return x_next
 
-def ddpm_step(x_t, t_now, t_next, model, conditioning=None):
+
+def ddpm_step(x, t_now, t_next, model, collapsing=True, conditioning=None):
     """
         A single step of diffusion denoising probabilistic model
         args:
-            x_t: the target
-            x_pred: the prediction
+            x_t: the image
             t_now: the current time step
             t_next: the next time step
-
+            collapsing: if True, the wavefunction collapses at each step
+            conditioning: if not None, the conditioning tensor (aka. the previous prediction)
         returns:
             the next prediction
     """
@@ -212,19 +198,20 @@ def ddpm_step(x_t, t_now, t_next, model, conditioning=None):
     # scheduling
     gamma_now = gamma_t(t_now)
     gamma_next = gamma_t(t_next)
+
+    #prediction of the target
+    x_pred = model(x, gamma_now, conditioning)
+
     alpha=gamma_now/gamma_next
     sigma=torch.sqrt(1-alpha)
 
 
-    z=torch.normal(0,1,size=x_t.shape,device=x_t.device)
-
-    #prediction of the target
-    x_pred = model(x_t, gamma_now, conditioning)
-
     #error
-    eps = (x_t - torch.sqrt(gamma_now) * x_pred) / torch.sqrt(1 - gamma_now)
+    eps = (x - torch.sqrt(gamma_now) * x_pred) / torch.sqrt(1 - gamma_now)
+    z=torch.normal(0,1,size=x.shape,device=x.device)
+
 
     #update
-    x_next = x_t - ((1-alpha)/torch.sqrt(alpha*(1 - gamma_now))) * eps + sigma * z
+    x_next = x - ((1-alpha)/torch.sqrt(alpha*(1 - gamma_now))) * eps + sigma * z
 
     return x_next

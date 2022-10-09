@@ -43,6 +43,9 @@ def qubit_to_decimal(x, bits = BITS):
     dec = reduce(x * mask, 'b c d h w -> b c h w', 'sum')
     return (dec / 255).clamp(0., 1.)
 
+def qubit_collapse(x):
+    return torch.bernoulli(torch.sin(x)**2)*np.pi/2
+
 # old utils
 def exists(x):
     return x is not None
