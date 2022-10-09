@@ -29,6 +29,7 @@ BITS = 8
 from .utils import *
 
 
+
 class BitDiffusion(nn.Module):
     def __init__(
         self,
@@ -83,18 +84,9 @@ class BitDiffusion(nn.Module):
 
         for i in range in tqdm(len(times)-1, desc = 'sampling loop time step'):
 
-            # scheduling
-            gamma_now = gamma_t(times[i])
-            gamma_next = gamma_t(times[i+1])
+            x_start=ddim_step(img, times[i], times[i + 1])  #TODO: add self conditioning
 
-
-            x_start = self.model(img, gamma_now, x_start)
-
-            # get predicted noise
-
-
-
-        return bits_to_decimal(img)
+        return qubit_to_decimal(x_start)
 
     @torch.no_grad()
     def sample(self, batch_size = 16):
@@ -140,3 +132,116 @@ class BitDiffusion(nn.Module):
 
         return pred
         #return F.mse_loss(pred, img)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Utils for diffusion
+
+
+
+def ddim_step(x_t, t_now, t_next, model, conditioning=None):
+    """
+        A single step of diffusion denoising implicit model
+        args:
+            x_t: the target
+            x_pred: the prediction
+            t_now: the current time step
+            t_next: the next time step
+
+        returns:
+            the next prediction
+    """
+
+    # scheduling
+    gamma_now = gamma_t(t_now)
+    gamma_next = gamma_t(t_next)
+
+    #prediction of the target
+    x_pred = model(x_t, gamma_now, conditioning)
+
+    #error
+    eps= (x_t-torch.sqrt(gamma_now)*x_pred)/torch.sqrt(1-gamma_now)
+
+    #update
+    x_next=x_t-torch.sqrt(1-gamma_next)*eps
+
+    return x_next
+
+def ddpm_step(x_t, t_now, t_next, model, conditioning=None):
+    """
+        A single step of diffusion denoising probabilistic model
+        args:
+            x_t: the target
+            x_pred: the prediction
+            t_now: the current time step
+            t_next: the next time step
+
+        returns:
+            the next prediction
+    """
+
+    # scheduling
+    gamma_now = gamma_t(t_now)
+    gamma_next = gamma_t(t_next)
+    alpha=gamma_now/gamma_next
+    sigma=torch.sqrt(1-alpha)
+
+
+    z=torch.normal(0,1,size=x_t.shape,device=x_t.device)
+
+    #prediction of the target
+    x_pred = model(x_t, gamma_now, conditioning)
+
+    #error
+    eps = (x_t - torch.sqrt(gamma_now) * x_pred) / torch.sqrt(1 - gamma_now)
+
+    #update
+    x_next = x_t - ((1-alpha)/torch.sqrt(alpha*(1 - gamma_now))) * eps + sigma * z
+
+    return x_next
