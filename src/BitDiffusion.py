@@ -74,7 +74,7 @@ class BitDiffusion(nn.Module):
         img = decimal_to_qubits(img)
 
         # noise sample
-        noise_level=(self.noise_prob.sample([batch, ])%.5).to(device)
+        noise_level=(self.noise_prob.sample([batch, ]) % 0.5).to(device)
         bernulli_prob=torch.einsum("b, bchw -> bchw", noise_level, torch.ones_like(img))
         noise = torch.bernoulli(bernulli_prob)
 
@@ -137,7 +137,7 @@ class BitDiffusion(nn.Module):
 
 
 #Utils for diffusion
-def ddim_step(x, t_now, t_next, model, collapsing=True, conditioning=None):
+def ddim_step(x, t_now, t_next, model, collapsing=True, conditioning=None, gamma_t=gamma_t):
     """
         A single step of diffusion denoising probabilistic model
         args:
@@ -171,7 +171,7 @@ def ddim_step(x, t_now, t_next, model, collapsing=True, conditioning=None):
     return x_next
 
 
-def ddpm_step(x, t_now, t_next, model, collapsing=True, conditioning=None):
+def ddpm_step(x, t_now, t_next, model, collapsing=True, conditioning=None, gamma_t=gamma_t):
     """
         A single step of diffusion denoising probabilistic model
         args:
