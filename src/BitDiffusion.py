@@ -89,9 +89,8 @@ class BitDiffusion(nn.Module):
 
         # predict
         pred = self.model(noised_img, noise_level, self_cond)
-
-        pred = torch.sin(pred*np.pi/2)**2
-        return torch.mean(img*torch.log(pred) + (1-img)*torch.log(1-pred))
+        
+        return pred
 
 
 
