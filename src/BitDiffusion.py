@@ -75,7 +75,6 @@ class BitDiffusion(nn.Module):
         # convert image to bit representation
         img = decimal_to_qubits(img)
 
-
         # noise sample
         noise_level=(self.noise_prob.sample([batch, ])%.5).to(device)
         bernulli_prob=torch.einsum("b, bchw -> bchw", noise_level, torch.ones_like(img))
@@ -91,7 +90,8 @@ class BitDiffusion(nn.Module):
         # predict
         pred = self.model(noised_img, noise_level, self_cond)
 
-        return torch.nn.functional.binary_cross_entropy(torch.sin(pred*np.pi/2)**2, img)
+        pred = torch.sin(pred*np.pi/2)**2
+        return torch.mean(img*torch.log(pred) + (1-img)*torch.log(1-pred))
 
 
 
