@@ -2,6 +2,7 @@ from random import random
 
 import torch
 from torch import nn
+from torch.distributions.exponential import Exponential
 
 from tqdm.auto import tqdm
 
@@ -21,7 +22,8 @@ class BitDiffusion(nn.Module):
         d_step='ddpm_step',
         time_difference = 0.,
         bit_scale = 1.,
-        collapsing=True
+        collapsing=True,
+        noise_prob=4.,
     ):
         super().__init__()
         self.model = model
@@ -30,6 +32,7 @@ class BitDiffusion(nn.Module):
         self.bit_scale = bit_scale
         self.timesteps = timesteps
         self.collapsing=collapsing
+        self.noise_prob=Exponential(torch.tensor(float(noise_prob)))
        
        #choose the type of diffusion step
         if d_step=='ddpm':
@@ -58,7 +61,7 @@ class BitDiffusion(nn.Module):
         for i in range in tqdm(len(times)-1, desc = 'sampling loop time step'):
 
             x=self.d_step(x, times[i], times[i + 1])  #TODO: add self conditioning
-            
+
             if self.collapsing:
                 x=qubit_collapse(x)
 
@@ -69,28 +72,16 @@ class BitDiffusion(nn.Module):
         batch, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
         assert h == img_size and w == img_size, f'height and width of image must be {img_size}'
 
-        # sample random times
-
-        #times = torch.zeros((batch,), device = device).float().uniform_(0, 0.999)
-        times=torch.rand([batch],device=device)
-
         # convert image to bit representation
+        img = decimal_to_qubits(img)
 
-        img = decimal_to_qubits(img)# * self.bit_scale
 
         # noise sample
+        noise_level=self.noise_prob.sample([batch])%.5
+        bernulli_prob=noise_level*torch.ones(img.shape[1:])
+        noise = torch.bernoulli(bernulli_prob).to(device)
 
-        noise = torch.randn_like(img)
-
-        noise_level = self.log_snr(times)
-        padded_noise_level = right_pad_dims_to(img, noise_level)
-        alpha, sigma =  log_snr_to_alpha_sigma(padded_noise_level)
-
-        noised_img = sigma * noise + img# * alpha
-
-        # if doing self-conditioning, 50% of the time, predict x_start from current set of times
-        # and condition with unet with that
-        # this technique will slow down training by 25%, but seems to lower FID significantly
+        noised_img= img^noise
 
         self_cond = None
         if random() < 0.5:
@@ -98,7 +89,6 @@ class BitDiffusion(nn.Module):
                 self_cond = self.model(noised_img, noise_level).detach_()
 
         # predict and take gradient step
-
         pred = self.model(noised_img, noise_level, self_cond)
 
         return pred
