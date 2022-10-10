@@ -53,17 +53,15 @@ class BitDiffusion(nn.Module):
 
 
     @torch.no_grad()
-    def sample(self, shape):
+    def sample(self, shape, conditioning=True):
 
-        times= torch.linspace(1., 0., self.timesteps + 1, device = self.device)
-        x = torch.randn(shape, device = self.device)
+        times= torch.linspace(0.5, 0., self.timesteps + 1, device = self.device)
+        x = torch.rand(shape, device = self.device)
 
         for i in range in tqdm(len(times)-1, desc = 'sampling loop time step'):
+            x=qubit_collapse(x)
 
-            x=self.d_step(x, times[i], times[i + 1])  #TODO: add self conditioning
-
-            if self.collapsing:
-                x=qubit_collapse(x)
+            x=self.d_step(x, times[i], times[i + 1], self.model, conditioning=conditioning)  #TODO: add self conditioning
 
         return qubit_to_decimal(x)
 
@@ -156,11 +154,16 @@ def ddim_step(x, t_now, t_next, model, collapsing=True, conditioning=None):
     gamma_now = gamma_t(t_now)
     gamma_next = gamma_t(t_next)
 
+    # conditioning
+    self_cond = None
+    if conditioning:
+        self_cond = model(x, gamma_now).detach_()
+
     #prediction of the target
-    x_pred = model(x, gamma_now, conditioning)
+    x_pred = model(x, gamma_now, self_cond)
 
     #error
-    eps= (x-torch.sqrt(gamma_now)*x_pred)/torch.sqrt(1-gamma_now)
+    eps = (x-torch.sqrt(gamma_now)*x_pred)/torch.sqrt(1-gamma_now)
 
     #update
     x_next=x-torch.sqrt(1-gamma_next)*eps
@@ -185,8 +188,13 @@ def ddpm_step(x, t_now, t_next, model, collapsing=True, conditioning=None):
     gamma_now = gamma_t(t_now)
     gamma_next = gamma_t(t_next)
 
+    # conditioning
+    self_cond = None
+    if conditioning:
+        self_cond = model(x, gamma_now).detach_()
+
     #prediction of the target
-    x_pred = model(x, gamma_now, conditioning)
+    x_pred = model(x, gamma_now, self_cond)
 
     alpha=gamma_now/gamma_next
     sigma=torch.sqrt(1-alpha)
