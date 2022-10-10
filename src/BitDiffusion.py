@@ -58,7 +58,7 @@ class BitDiffusion(nn.Module):
         times= torch.linspace(0.5, 0., self.timesteps + 1, device = self.device)
         x = torch.rand(shape, device = self.device)
 
-        for i in range in tqdm(len(times)-1, desc = 'sampling loop time step'):
+        for i in tqdm(range(len(times)-1), desc = 'sampling loop time step'):
             x=qubit_collapse(x)
 
             x=self.d_step(x, times[i], times[i + 1], self.model, conditioning=conditioning)  #TODO: add self conditioning
