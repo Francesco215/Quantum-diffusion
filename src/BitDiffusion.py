@@ -139,14 +139,13 @@ class BitDiffusion(nn.Module):
 
 
 #Utils for diffusion
-def ddim_step(x, t_now, t_next, model, collapsing=True, conditioning=None, gamma_t=gamma_t):
+def ddim_step(x, t_now, t_next, model, conditioning=None, gamma_t=gamma_t):
     """
         A single step of diffusion denoising probabilistic model
         args:
             x_t: the image
             t_now: the current time step
             t_next: the next time step
-            collapsing: if True, the wavefunction collapses at each step
             conditioning: if not None, the conditioning tensor (aka. the previous prediction)
         returns:
             the next prediction
@@ -173,14 +172,13 @@ def ddim_step(x, t_now, t_next, model, collapsing=True, conditioning=None, gamma
     return x_next
 
 
-def ddpm_step(x, t_now, t_next, model, collapsing=True, conditioning=None, gamma_t=gamma_t):
+def ddpm_step(x, t_now, t_next, model, conditioning=None, gamma_t=gamma_t):
     """
         A single step of diffusion denoising probabilistic model
         args:
             x_t: the image
             t_now: the current time step
             t_next: the next time step
-            collapsing: if True, the wavefunction collapses at each step
             conditioning: if not None, the conditioning tensor (aka. the previous prediction)
         returns:
             the next prediction
