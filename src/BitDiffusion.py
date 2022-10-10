@@ -91,7 +91,7 @@ class BitDiffusion(nn.Module):
         # predict
         pred = self.model(noised_img, noise_level, self_cond)
 
-        return torch.nn.functional.cross_entropy(torch.sin(pred*np.pi/2)**2, img)
+        return torch.nn.functional.binary_cross_entropy(torch.sin(pred*np.pi/2)**2, img)
 
 
 
