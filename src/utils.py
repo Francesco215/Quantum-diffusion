@@ -43,11 +43,14 @@ def qubit_to_decimal(x, bits = BITS):
     dec = reduce(x * mask, 'b c d h w -> b c h w', 'sum')
     return (dec / 255).clamp(0., 1.)
 
+def theta_to_prob(theta, eps=1e-3):
+    return torch.clamp(torch.sin(theta*np.pi/2)**2, eps, 1 - eps)
+
 def qubit_collapse(x):
     return torch.bernoulli(theta_to_prob(x))
 
-def theta_to_prob(theta, eps=1e-3):
-    return torch.clamp(torch.sin(theta*np.pi/2)**2, eps, 1 - eps)
+def cross_entropy(prediction,target):
+    return -torch.mean(target*torch.log(prediction + 1e-8) + (1-target)*torch.log(1-prediction + 1e-8))
 
 
 # old utils
