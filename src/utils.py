@@ -46,7 +46,7 @@ def qubit_to_decimal(x, bits = BITS):
 def qubit_collapse(x):
     return torch.bernoulli(theta_to_prob(x))
 
-def theta_to_prob(theta, eps=1e-5):
+def theta_to_prob(theta, eps=1e-3):
     return torch.clamp(torch.sin(theta*np.pi/2)**2, eps, 1 - eps)
 
 
