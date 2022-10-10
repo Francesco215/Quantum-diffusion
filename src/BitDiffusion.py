@@ -61,7 +61,7 @@ class BitDiffusion(nn.Module):
         for i in tqdm(range(len(times)-1), desc = 'sampling loop time step'):
             x=qubit_collapse(x)
 
-            x=self.d_step(x, times[i], times[i + 1], self.model, conditioning=conditioning)  #TODO: add self conditioning
+            x=self.d_step(x, times[i:i+1], times[i+1:i+2], self.model, conditioning=conditioning)  #TODO: add self conditioning
 
         return qubit_to_decimal(x)
 
