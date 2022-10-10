@@ -1,29 +1,11 @@
 import math
-from torch import functional as F
-
-import math
-from pathlib import Path
-from random import random
-from functools import partial
-from multiprocessing import cpu_count
 
 import torch
-from torch import nn, einsum
 from torch.special import expm1
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
 
-from torch.optim import Adam
-from torchvision import transforms as T, utils
 
-from einops import rearrange, reduce, repeat
-from einops.layers.torch import Rearrange
-
-from PIL import Image
-from tqdm.auto import tqdm
-from ema_pytorch import EMA
-
-from accelerate import Accelerator
+from einops import rearrange, reduce
 
 import numpy as np
 
@@ -61,10 +43,10 @@ def qubit_to_decimal(x, bits = BITS):
     dec = reduce(x * mask, 'b c d h w -> b c h w', 'sum')
     return (dec / 255).clamp(0., 1.)
 
+def qubit_collapse(x):
+    return torch.bernoulli(torch.sin(x)**2)*np.pi/2
 
-
-
-
+# old utils
 def exists(x):
     return x is not None
 
@@ -96,9 +78,6 @@ def convert_image_to(img_type, image):
 
 def l2norm(t):
     return F.normalize(t, dim = -1)
-
-
-
 
 # utils for bit diffusion class
 def log(t, eps = 1e-20):
