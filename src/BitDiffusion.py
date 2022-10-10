@@ -18,21 +18,21 @@ class BitDiffusion(nn.Module):
         model,
         *, #ma a che serve sto asterisco?
         image_size,
+        gamma_t=gamma_t,
         timesteps = 1000,
         d_step='ddpm',
         time_difference = 0.,
         bit_scale = 1.,
         collapsing=True,
-        noise_prob=4.,
     ):
         super().__init__()
         self.model = model
         self.channels = self.model.channels
         self.image_size = image_size
+        self.gamma_t = gamma_t
         self.bit_scale = bit_scale
         self.timesteps = timesteps
         self.collapsing=collapsing
-        self.noise_prob=Exponential(torch.tensor(float(noise_prob)))
        
        #choose the type of diffusion step
         if d_step=='ddpm':
@@ -53,15 +53,15 @@ class BitDiffusion(nn.Module):
 
 
     @torch.no_grad()
-    def sample(self, shape, conditioning=True, gamma_t=gamma_t):
+    def sample(self, shape, conditioning=True):
 
-        times= torch.linspace(0.5, 0., self.timesteps + 1, device = self.device)
+        times = torch.linspace(0., 1., self.timesteps + 1, device = self.device)
         x = torch.rand(shape, device = self.device)
 
         for i in tqdm(range(len(times)-1), desc = 'sampling loop time step'):
             x=qubit_collapse(x)
 
-            x=self.d_step(x, times[i:i+1], times[i+1:i+2], self.model, conditioning=conditioning, gamma_t=gamma_t)  #TODO: add self conditioning
+            x=self.d_step(x, times[i:i+1], times[i+1:i+2], self.model, conditioning=conditioning, gamma_t=self.gamma_t)
 
         return qubit_to_decimal(x)
 
@@ -74,8 +74,10 @@ class BitDiffusion(nn.Module):
         img = decimal_to_qubits(img)
 
         # noise sample
-        noise_level=(self.noise_prob.sample([batch, ]) % 0.5).to(device)
-        bernulli_prob=torch.einsum("b, bchw -> bchw", noise_level, torch.ones_like(img))
+        t = torch.rand(batch, device = device)
+        t = gamma_t(t)
+
+        bernulli_prob=torch.einsum("b, bchw -> bchw", t * 0.5, torch.ones_like(img))
         noise = torch.bernoulli(bernulli_prob)
 
         noised_img = ((img.bool()) ^ (noise.bool())).float()
@@ -83,10 +85,10 @@ class BitDiffusion(nn.Module):
         self_cond = None
         if random() < 0.5:
             with torch.no_grad():
-                self_cond = self.model(noised_img, noise_level).detach_()
+                self_cond = self.model(noised_img, t).detach_()
 
         # predict
-        pred = self.model(noised_img, noise_level, self_cond)
+        pred = self.model(noised_img, t, self_cond)
         
         return pred
 
