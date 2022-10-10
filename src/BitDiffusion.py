@@ -92,8 +92,6 @@ class BitDiffusion(nn.Module):
         pred = self.model(noised_img, noise_level, self_cond)
 
         return pred
-        #return F.mse_loss(pred, img)
-
 
 
 
