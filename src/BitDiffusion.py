@@ -19,7 +19,7 @@ class BitDiffusion(nn.Module):
         *, #ma a che serve sto asterisco?
         image_size,
         timesteps = 1000,
-        d_step='ddpm_step',
+        d_step='ddpm',
         time_difference = 0.,
         bit_scale = 1.,
         collapsing=True,
@@ -77,22 +77,21 @@ class BitDiffusion(nn.Module):
 
 
         # noise sample
-        noise_level=self.noise_prob.sample([batch])%.5
-        bernulli_prob=noise_level*torch.ones(img.shape[1:])
+        noise_level=self.noise_prob.sample([batch, ])%.5
+        bernulli_prob=torch.einsum("b, bchw -> bchw", noise_level, torch.ones_like(img))
         noise = torch.bernoulli(bernulli_prob).to(device)
 
-        noised_img= img^noise
+        noised_img = ((img.bool()) ^ (noise.bool())).float()
 
         self_cond = None
         if random() < 0.5:
             with torch.no_grad():
                 self_cond = self.model(noised_img, noise_level).detach_()
 
-        # predict and take gradient step
+        # predict
         pred = self.model(noised_img, noise_level, self_cond)
 
-        return pred
-
+        return torch.nn.functional.mse_loss(pred, img)
 
 
 

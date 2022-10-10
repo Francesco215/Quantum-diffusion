@@ -27,7 +27,7 @@ def decimal_to_qubits(x,bits=BITS):
     mask = rearrange(mask, 'd -> d 1 1') #mask.shape == (8, 1, 1)
     x = rearrange(x, 'b c h w -> b c 1 h w') #batch, channel, height, width
 
-    bits = ((x & mask) != 0).float()*np.pi/2
+    bits = ((x & mask) != 0).float()
     bits = rearrange(bits, 'b c d h w -> b (c d) h w')
     return bits
 
@@ -35,7 +35,7 @@ def qubit_to_decimal(x, bits = BITS):
     """ expects x to be a polar angle in randians, returns a decimal number in the range [0, 1] """
     device = x.device
 
-    x = torch.bernoulli(torch.sin(x)**2).int()
+    x = torch.bernoulli(torch.sin(x*np.pi/2)**2).int()
     mask = 2 ** torch.arange(bits - 1, -1, -1, device = device, dtype = torch.int32)
 
     mask = rearrange(mask, 'd -> d 1 1')
@@ -44,7 +44,7 @@ def qubit_to_decimal(x, bits = BITS):
     return (dec / 255).clamp(0., 1.)
 
 def qubit_collapse(x):
-    return torch.bernoulli(torch.sin(x)**2)*np.pi/2
+    return torch.bernoulli(torch.sin(x*np.pi/2)**2)
 
 # old utils
 def exists(x):
