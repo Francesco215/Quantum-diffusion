@@ -78,7 +78,7 @@ class BitDiffusion(nn.Module):
 
         # noise sample
         noise_level=self.noise_prob.sample([batch, ])%.5
-        bernulli_prob=torch.einsum("b, bchw -> bchw", noise_level, torch.ones_like(img))
+        bernulli_prob=torch.einsum("b, bchw -> bchw", noise_level.to(device), torch.ones_like(img))
         noise = torch.bernoulli(bernulli_prob).to(device)
 
         noised_img = ((img.bool()) ^ (noise.bool())).float()
