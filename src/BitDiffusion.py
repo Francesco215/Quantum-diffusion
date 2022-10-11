@@ -34,7 +34,8 @@ class BitDiffusion(nn.Module):
         d_step='ddpm',
         time_difference=0.,
         collapsing=True,
-        noise_fn=bernoulli_noise
+        noise_fn=bernoulli_noise,
+        noise_before=False
     ):
         super().__init__()
         self.model = model
@@ -44,6 +45,7 @@ class BitDiffusion(nn.Module):
         self.timesteps = timesteps
         self.collapsing = collapsing
         self.noise_fn = noise_fn
+        self.noise_before = noise_before
 
        # choose the type of diffusion step
         if d_step == 'ddpm':
@@ -81,12 +83,15 @@ class BitDiffusion(nn.Module):
         batch, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
         assert h == img_size and w == img_size, f'height and width of image must be {img_size}'
 
-        # convert image to bit representation
-        img = decimal_to_qubits(img)
-
         # noise sample
         t = torch.rand(batch, device=device)
         t = self.gamma_t(t)
+
+        if self.noise_before:
+            img = gaussian_noise(img, t)
+
+        # convert image to bit representation
+        img = decimal_to_qubits(img)
 
         noised_img = self.noise_fn(img, t)
 
