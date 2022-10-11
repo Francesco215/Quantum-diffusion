@@ -3,7 +3,6 @@ from random import random
 
 import torch
 from torch import nn
-from torch.distributions.exponential import Exponential
 
 from tqdm.auto import tqdm
 
@@ -20,7 +19,7 @@ def gaussian_noise(img, t):
     mu, s = torch.sqrt(1-t), torch.sqrt(t)
     noise = torch.randn_like(img)
 
-    return mu*img + s*noise
+    return torch.einsum("b, bchw -> bchw", mu, img) + torch.einsum("b, bchw -> bchw", s, noise)s
 
 
 class BitDiffusion(nn.Module):
