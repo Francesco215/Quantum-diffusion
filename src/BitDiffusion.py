@@ -19,7 +19,7 @@ def gaussian_noise(img, t):
     mu, s = torch.sqrt(1-t), torch.sqrt(t)
     noise = torch.randn_like(img)
 
-    return torch.einsum("b, bchw -> bchw", mu, img) + torch.einsum("b, bchw -> bchw", s, noise)s
+    return torch.einsum("b, bchw -> bchw", mu, img) + torch.einsum("b, bchw -> bchw", s, noise)
 
 
 class BitDiffusion(nn.Module):
