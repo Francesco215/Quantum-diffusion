@@ -90,7 +90,7 @@ class BitDiffusion(nn.Module):
         # predict
         pred = self.model(noised_img, t, self_cond)
         
-        return pred
+        return pred, noised_img
 
 
 
