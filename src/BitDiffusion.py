@@ -104,73 +104,44 @@ class BitDiffusion(nn.Module):
         
         return pred, noised_img
 
+def cosine_schedules(t:float ,t_max:float ):
+    """Calculates the alpha value for a given timestep, see eq. 17 of improved DDPM paper
+
+    Args:
+        t (float): current timestep
+        t_max (float): total number of timesteps
+
+    Returns:
+        float: alpha value
+    """
+
+    s=1/BITS
+
+    #TODO: check if using torch for the sqrt function is better
+    return np.cos((t/t_max+s)/(1+s)*np.pi/2)**2
+
 
 # Utils for diffusion
-def ddim_step(x, t_now, t_next, model, conditioning=None, gamma_t=gamma_t):
-    """
-        A single step of diffusion denoising probabilistic model
-        args:
-            x_t: the image
-            t_now: the current time step
-            t_next: the next time step
-            conditioning: if not None, the conditioning tensor (aka. the previous prediction)
-        returns:
-            the next prediction
-    """
+def reverse_step(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_next:float ,sigma=0) -> torch.Tensor:
+    """Calculates the reverse step. It implements eq 12 of the DDIM paper
 
-    # scheduling
-    gamma_now = gamma_t(t_now)
-    gamma_next = gamma_t(t_next)
+    Args:
+        x (torch.tensor): current state of the image
+        epsilon (torch.tensor): prediction of the final image
+        alpha_old (float): see eq 12 of DDIM paper
+        alpha_next (float): see eq 12 of DDIM paper
+        sigma (int, optional): Noise of the reverse step,
+            if sigma==0 then it is a DDIM step,
+            if sigma==sqrt((1-alpha_old)/alpha_old) then it is a DDPM step.
+            Defaults to 0.
 
-    # conditioning
-    self_cond = None
-    if conditioning:
-        self_cond = model(x, gamma_now).detach_()
-
-    # prediction of the target
-    x_pred = model(x, gamma_now, self_cond)
-
-    # error
-    eps = (x-torch.sqrt(gamma_now)*x_pred)/torch.sqrt(1-gamma_now)
-
-    # update
-    x_next = x-torch.sqrt(1-gamma_next)*eps
-
-    return x_next
-
-
-def ddpm_step(x, t_now, t_next, model, conditioning=None, gamma_t=gamma_t):
-    """
-        A single step of diffusion denoising probabilistic model
-        args:
-            x_t: the image
-            t_now: the current time step
-            t_next: the next time step
-            conditioning: if not None, the conditioning tensor (aka. the previous prediction)
-        returns:
-            the next prediction
+    Returns:
+        torch.Tensor: reverse step
     """
 
-    # scheduling
-    gamma_now = gamma_t(t_now)
-    gamma_next = gamma_t(t_next)
+    mean = ( x - torch.sqrt( 1 - alpha_old )*epsilon ) * torch.sqrt( alpha_old/alpha_next )
+    mean += torch.sqrt( 1-alpha_old-sigma**2 ) * epsilon
 
-    # conditioning
-    self_cond = None
-    if conditioning:
-        self_cond = model(x, gamma_now).detach_()
+    return mean + torch.normal(0, sigma, size=x.shape, device=x.device)
 
-    # prediction of the target
-    x_pred = model(x, gamma_now, self_cond)
-    alpha = gamma_now/gamma_next
-    sigma = torch.sqrt(torch.abs(1-alpha))
 
-    # error
-    eps = (x - torch.sqrt(gamma_now) * x_pred) / torch.sqrt(1 - gamma_now)
-    z = torch.normal(0, 1, size=x.shape, device=x.device)
-
-    # update
-    m1 = ((1-alpha)/torch.sqrt(alpha*(1 - gamma_now)))
-    x_next = x - m1 * eps + sigma * z
-
-    return x_next

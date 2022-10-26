@@ -27,7 +27,7 @@ def decimal_to_qubits(x,bits=BITS):
     mask = rearrange(mask, 'd -> d 1 1') #mask.shape == (8, 1, 1)
     x = rearrange(x, 'b c h w -> b c 1 h w') #batch, channel, height, width
 
-    bits = ((x & mask) != 0).float()
+    bits = ((x & mask) != 0).float() - 1/2
     bits = rearrange(bits, 'b c d h w -> b (c d) h w')
     return bits
 
@@ -35,7 +35,7 @@ def qubit_to_decimal(x, bits = BITS):
     """ expects x to be a polar angle in randians, returns a decimal number in the range [0, 1] """
     device = x.device
 
-    x = torch.bernoulli(theta_to_prob(x)).int()
+    x = (qubit_collapse(x)+1/2).int()
     mask = 2 ** torch.arange(bits - 1, -1, -1, device = device, dtype = torch.int32)
 
     mask = rearrange(mask, 'd -> d 1 1')
@@ -43,11 +43,11 @@ def qubit_to_decimal(x, bits = BITS):
     dec = reduce(x * mask, 'b c d h w -> b c h w', 'sum')
     return (dec / 255).clamp(0., 1.)
 
-def theta_to_prob(theta, eps=1e-3):
-    return torch.clamp(torch.sin(theta*np.pi/2)**2, eps, 1 - eps)
+def theta_to_prob(theta, eps=1e-8):
+    return torch.clamp(torch.sin((theta+1/2)*np.pi/2)**2, eps, 1 - eps)
 
 def qubit_collapse(x):
-    return torch.bernoulli(theta_to_prob(x))
+    return torch.bernoulli(theta_to_prob(x)) - 1/2
 
 def cross_entropy(prediction,target):
     return -torch.mean(target*torch.log(prediction + 1e-8) + (1-target)*torch.log(1-prediction + 1e-8))
