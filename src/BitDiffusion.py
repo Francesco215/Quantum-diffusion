@@ -8,20 +8,6 @@ from tqdm.auto import tqdm
 
 BITS = 8
 
-
-def bernoulli_noise(img, t):
-    bernulli_prob = torch.einsum("b, bchw -> bchw", t*0.5, torch.ones_like(img))
-    noise = torch.bernoulli(bernulli_prob)
-
-    return ((img.bool()) ^ (noise.bool())).float()
-
-def gaussian_noise(img, t):
-    mu, s = torch.sqrt(1-t), torch.sqrt(t)
-    noise = torch.randn_like(img)
-
-    return torch.einsum("b, bchw -> bchw", mu, img) + torch.einsum("b, bchw -> bchw", s, noise)
-
-
 class BitDiffusion(nn.Module):
     def __init__(
         self,
@@ -104,7 +90,90 @@ class BitDiffusion(nn.Module):
         
         return pred, noised_img
 
-def cosine_schedules(t:float ,t_max:float ):
+
+
+def bernoulli_noise(img, alpha) -> torch.Tensor:
+    """takes a batch of images and adds to each one of them a bernoulli noise
+
+    Args:
+        img (torch.Tensor): images to add noise to
+        alpha (torch.Tensor): the sqrt(alpha) is the variance of the gaussian noise
+
+    Returns:
+        torch.Tensor: The noised images
+    """
+    assert alpha.shape[0]==img.shape[0], f'alpha and img must have the same batch size, alpha has {alpha.shape[0]} and img has {img.shape[0]}'
+
+    p_flip=probability_quantum(torch.ones_like(alpha)-alpha)
+    bernulli_prob = torch.einsum("b, bchw -> bchw", p_flip, torch.ones_like(img))
+    noise = torch.bernoulli(bernulli_prob)
+
+    return ((img.bool()) ^ (noise.bool())).float()
+
+
+def gaussian_noise(img, t):
+    mu, s = torch.sqrt(1-t), torch.sqrt(t)
+    noise = torch.randn_like(img)
+
+    return torch.einsum("b, bchw -> bchw", mu, img) + torch.einsum("b, bchw -> bchw", s, noise)
+
+
+def denoise_images(model, image, time, timesteps, sigma=0, device="cpu") -> torch.Tensor:
+    """Generates an image from pure noise
+
+    Args:
+        model (nn.Module): the model to use for generation
+        shape (float): the shape of the tensor to generate. (b,c,h,w)
+            the first dimention is the batch
+            the second dimention represents the channels, it must be equal to 3*BITS
+            the third and fourth dimention represent the height and width of the image
+        timesteps (float): the number of total timesteps to count
+        sigma (int, optional): Noise of the reverse step,
+            if sigma==0 then it is a DDIM step,
+            if sigma==sqrt((1-alpha_old)/alpha_old) then it is a DDPM step.
+            Defaults to 0.
+        device (optional): the device to use
+    Returns:
+        torch.Tensor: The generated images
+    """
+    assert image.shape[1] == 3*BITS, f'channels must be {3*BITS}' #TODO: controllare che sia corretto
+    #WIP
+
+    
+# Utils for diffusion
+def generate_from_noise(model, shape, timesteps, sigma=0, device='cpu') -> torch.Tensor:
+    """Generates an image from pure noise
+
+    Args:
+        model (nn.Module): the model to use for generation
+        shape (float): the shape of the tensor to generate. (b,c,h,w)
+            the first dimention is the batch
+            the second dimention represents the channels, it must be equal to 3*BITS
+            the third and fourth dimention represent the height and width of the image
+        timesteps (float): the number of total timesteps to count
+        sigma (int, optional): Noise of the reverse step,
+            if sigma==0 then it is a DDIM step,
+            if sigma==sqrt((1-alpha_old)/alpha_old) then it is a DDPM step.
+            Defaults to 0.
+        device (optional): the device to use
+    Returns:
+        torch.Tensor: The generated images
+    """
+    assert shape[1] == 3*BITS, f'channels must be {3*BITS}' #TODO: controllare che sia corretto
+    x=torch.poisson(0.5*torch.ones(shape),device=device)
+    alpha_next=0
+
+    for t in range(timesteps):
+        alpha_old=alpha_next
+        alpha_next=cosine_schedule(t,timesteps)
+        epsilon=model(x,t)
+        x=reverse_step(x,epsilon,alpha_old,alpha_next,sigma)
+
+    return x
+
+
+
+def cosine_schedule(t:float ,t_max:float ):
     """Calculates the alpha value for a given timestep, see eq. 17 of improved DDPM paper
 
     Args:
@@ -121,7 +190,6 @@ def cosine_schedules(t:float ,t_max:float ):
     return np.cos((t/t_max+s)/(1+s)*np.pi/2)**2
 
 
-# Utils for diffusion
 def reverse_step(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_next:float ,sigma=0) -> torch.Tensor:
     """Calculates the reverse step. It implements eq 12 of the DDIM paper
 

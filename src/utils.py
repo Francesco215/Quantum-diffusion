@@ -53,6 +53,18 @@ def cross_entropy(prediction,target):
     return -torch.mean(target*torch.log(prediction + 1e-8) + (1-target)*torch.log(1-prediction + 1e-8))
 
 
+def probability_quantum(sigma):
+    """Returns the probability of having a spin flip as a function of the variance of the gaussian
+
+    Args:
+        sigma (float): gaussian standard deviation
+
+    Returns:
+        float: the probability of having spin-flip
+    """
+    sin=np.sin(np.sqrt(1-sigma**2)*np.pi/2)
+    return (1+np.exp(-2*sigma**2)*sin)/2
+
 # old utils
 def exists(x):
     return x is not None
