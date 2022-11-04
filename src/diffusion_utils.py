@@ -26,11 +26,22 @@ def bernoulli_noise(img, alpha) -> torch.Tensor:
 
     return img ^ noise
 
-#TODO: completely rewrite and test this function
-def gaussian_noise(img, t):
-    mu, s = torch.sqrt(1-t), torch.sqrt(t)
-    noise = torch.randn_like(img)
+def gaussian_noise(img, alpha):
+    """takes a batch of images and adds to each one of them a bernoulli noise.
+        The gaussian noise can be applied only if the img is in the qubit representation
+    Args:
+        img (torch.Tensor): images to add noise to
+        alpha (torch.Tensor): the sqrt(1-alpha) is the variance of the gaussian noise
 
+    Returns:
+        torch.Tensor: The noised images
+    """
+    assert alpha.shape[0]==img.shape[0], f'alpha must have the same size as the batch size of img, alpha has {alpha.shape[0]} and img has {img.shape[0]}'
+    assert img.dtype ==torch.float, f'img must be in the qubit representation, img has dtype {img.dtype}'
+
+    mu, s = torch.sqrt(alpha), torch.sqrt(1-alpha)
+    noise = torch.randn_like(img)
+    #       x*sqrt(alpha)                           +           noise*sqrt(1-alpha)
     return torch.einsum("b, bchw -> bchw", mu, img) + torch.einsum("b, bchw -> bchw", s, noise)
 
 
