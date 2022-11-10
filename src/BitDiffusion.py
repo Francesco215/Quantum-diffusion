@@ -1,4 +1,5 @@
 from .utils import *
+from .diffusion_utils import *
 from random import random
 
 import torch
@@ -6,63 +7,58 @@ from torch import nn
 
 from tqdm.auto import tqdm
 
+from typing import Callable
+
 BITS = 8
 
 class BitDiffusion(nn.Module):
     def __init__(
         self,
-        model,
+        model: nn.Module,
         *,  # ma a che serve sto asterisco?
         image_size,
-        schedule=None,
-        timesteps=1000,
-        d_step='ddpm',
+        schedule: Callable=cosine_schedule,
+        timesteps: int=1000,
+        reverse_step: Callable=reverse_DDIM,
         time_difference=0.,
-        collapsing=True,
-        noise_fn=None,
+        collapsing: bool=True,
+        noise_fn: Callable=bernoulli_noise,
         noise_before=False
     ):
         super().__init__()
         self.model = model
         self.channels = self.model.channels
         self.image_size = image_size
-        self.schedule = default(schedule, cosine_schedule)
+        self.schedule = schedule
         self.timesteps = timesteps
         self.collapsing = collapsing
-        self.noise_fn = default(noise_fn, bernoulli_noise)
+        self.noise_fn = noise_fn
         self.noise_before = noise_before
-
-       # choose the type of diffusion step
-        if d_step == 'ddpm':
-            self.d_step = ddpm_step
-        elif d_step == 'ddim':
-            self.d_step = ddim_step
-        else:
-            raise ValueError(
-                f'd_step must be ddpm or ddim, you passed "{d_step}"')
+        self.reverse_step = reverse_step
 
         # proposed in the paper, summed to time_next
         # as a way to fix a deficiency in self-conditioning and lower FID when the number of sampling timesteps is < 400
         self.time_difference = time_difference
 
-    @property
+    @property #is this useful?
     def device(self):
         return next(self.model.parameters()).device
 
     @torch.no_grad()
-    def sample(self, shape, conditioning=False, device=None):
+    def sample(self, shape):
+        """Generates an image from pure noise
 
-        device = default(device, self.device)
-        times = torch.linspace(0., 1., self.timesteps + 1, device=device)
+        Args:
+            shape (torch.Tensor): the shape of the images to generate. (b,c,h,w)
+            device (torch.device, optional): _description_. Defaults to None.
 
-        x = torch.rand(shape, device=device)
-        for i in tqdm(range(len(times)-1), desc='sampling loop time step'):
-            if self.collapsing:
-                x = qubit_collapse(x)
+        Returns:
+            torch.Tensor: the generated images
+        """
 
-            x = self.d_step(x, times[i:i+1], times[i+1:i+2], self.model,
-                            conditioning=conditioning, gamma_t=self.gamma_t)
-        return qubit_to_decimal(x)
+        return generate_from_noise(self.model,self.reverse_step, shape, self.timesteps, self.schedule, self.device)
+
+
 
     def forward(self, img, *args, **kwargs):
         batch, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
