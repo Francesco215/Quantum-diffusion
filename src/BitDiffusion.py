@@ -22,8 +22,7 @@ class BitDiffusion(nn.Module):
         reverse_step: Callable=reverse_DDIM,
         time_difference=0.,
         collapsing: bool=True,
-        noise_fn: Callable=bernoulli_noise,
-        noise_before=False
+        noise_fn: Callable=gaussian_noise,
     ):
         super().__init__()
         self.model = model
@@ -33,7 +32,6 @@ class BitDiffusion(nn.Module):
         self.timesteps = timesteps
         self.collapsing = collapsing
         self.noise_fn = noise_fn
-        self.noise_before = noise_before
         self.reverse_step = reverse_step
 
         # proposed in the paper, summed to time_next
@@ -64,25 +62,22 @@ class BitDiffusion(nn.Module):
         batch, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
         assert h == img_size and w == img_size, f'height and width of image must be {img_size}'
 
-        # noise sample
-        t = torch.rand(batch, device=device)
-        t = self.gamma_t(t)
-
-        if self.noise_before:
-            img = gaussian_noise(img, t)
-
         # convert image to bit representation
         img = decimal_to_qubits(img)
 
-        noised_img = self.noise_fn(img, t)
+        # noise sample
+        alpha = torch.rand(batch, device=device)
+        #t = self.gamma_t(t)
+
+        noised_img = self.noise_fn(img, alpha)
 
         self_cond = None
         if random() < 0.5:
             with torch.no_grad():
-                self_cond = self.model(noised_img, t).detach_()
+                self_cond = self.model(noised_img, alpha).detach_()
 
         # predict
-        pred = self.model(noised_img, t, self_cond)
+        pred = self.model(noised_img, alpha, self_cond)
         
         return pred, noised_img
 
