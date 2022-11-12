@@ -17,6 +17,8 @@ def decimal_to_binary(img,bits=BITS):
         expects image tensor with each x representing the polar angle of each qbit
     """
     assert img.shape[1]==3, f'the image should have 3 channels, the input has {img.shape[1]} channels'
+    assert (img>=0).all().item() and (img<=1).all().item(), f'the image should be in the range [0,1), the input has values in the range [{img.min().item()},{img.max().item()}]'
+
     device = img.device
 
     x = (img * 255).int().clamp(0, 255)
@@ -44,6 +46,17 @@ def decimal_to_qubits(x,bits=BITS):
 def qubit_to_binary(x):
     return (qubit_collapse(x) + 1/2).bool()
 
+def binary_to_decimal(x, bits = BITS):
+    device=x.device
+    x=x.int()
+    
+    mask = 2 ** torch.arange(bits - 1, -1, -1, device = device, dtype = torch.int32)
+
+    mask = rearrange(mask, 'd -> d 1 1')
+    x = rearrange(x, 'b (c d) h w -> b c d h w', d = 8)
+    dec = reduce(x * mask, 'b c d h w -> b c h w', 'sum')
+    return (dec / 255).clamp(0., 1.)
+
 def qubit_to_decimal(x, bits = BITS):
     """ expects x to be a polar angle in randians, returns a decimal number in the range [0, 1] """
     device = x.device
@@ -57,7 +70,7 @@ def qubit_to_decimal(x, bits = BITS):
     return (dec / 255).clamp(0., 1.)
 
 def theta_to_prob(theta, eps=1e-8):
-    return torch.clamp(torch.sin((theta+1/2)*np.pi/2)**2, eps, 1 - eps)
+    return torch.sin((theta+1/2)*np.pi/2)**2
 
 def qubit_collapse(x):
     return torch.bernoulli(theta_to_prob(x)) - 1/2
@@ -66,17 +79,38 @@ def cross_entropy(prediction,target):
     return -torch.mean(target*torch.log(prediction + 1e-8) + (1-target)*torch.log(1-prediction + 1e-8))
 
 
-def probability_quantum(sigma):
-    """Returns the probability of having a spin flip as a function of the standard deviation of the gaussian
+def probability_quantum_gaussian(mu:torch.Tensor, sigma:torch.Tensor) -> torch.Tensor:
+    """Given a gaussian distribution of probability of the angle of the qubit with mean mu and standard deviation sigma,
+        returns the probability of the qubit being in the state |1>
 
+        Note:
+        I choose to give the probability of the state |1> because the function torch.bernoulli()
+        asks the probability of the state |1>
     Args:
-        sigma (float): gaussian standard deviation
+        mu (torch.Tensor): mean of the gaussian distribution
+        sigma (torch.Tensor): gaussian standard deviation
 
     Returns:
-        float: the probability of having spin-flip
+        torch.Tensor: the probability of being in the state |1>
     """
-    sin=np.sin(np.sqrt(1-sigma**2)*np.pi/2)
-    return (1+np.exp(-2*sigma**2)*sin)/2
+    sin=np.sin(2*mu)
+    return (1-np.exp(-2*sigma**2)*sin)/2
+
+def probablity_flip_gaussian(alpha:torch.Tensor) -> torch.Tensor:
+    """TODO scrivere documentazione
+
+    Args:
+        alpha (torch.Tensor): _description_
+
+    Returns:
+        torch.Tensor: spin flip probability
+    """
+
+    mu=-np.pi/4*torch.sqrt(alpha)
+    sigma=torch.sqrt(torch.ones_like(alpha)-alpha)
+
+    return 1-probability_quantum_gaussian(mu,sigma)
+
 
 # old utils
 def exists(x):

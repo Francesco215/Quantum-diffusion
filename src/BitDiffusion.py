@@ -27,8 +27,9 @@ class BitDiffusion(nn.Module):
         super().__init__()
         self.model = model
         self.channels = self.model.channels
+
         self.image_size = image_size
-        self.schedule = schedule
+        #self.schedule = schedule
         self.timesteps = timesteps
         self.collapsing = collapsing
         self.noise_fn = noise_fn
@@ -58,26 +59,31 @@ class BitDiffusion(nn.Module):
 
 
 
-    def forward(self, img, *args, **kwargs):
+    def forward(self, img:torch.Tensor,
+                alpha:torch.Tensor,
+                self_conditioning:bool = False,
+                *args, **kwargs) -> torch.Tensor:
+        """This is an estiamate of the target image
+
+        Args:
+            img (torch.Tensor): the image to do the prediction of the target image
+            alpha (torch.Tensor): noise applied to each image
+            self_conditioning (bool, optional): wether or not to applu the self-conditioning to the algorithm. Defaults to False.
+
+        Returns:
+            torch.Tensor: The predition of the target image
+        """
+
         batch, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
         assert h == img_size and w == img_size, f'height and width of image must be {img_size}'
 
-        # convert image to bit representation
-        img = decimal_to_qubits(img)
-
-        # noise sample
-        alpha = torch.rand(batch, device=device)
-        #t = self.gamma_t(t)
-
-        noised_img = self.noise_fn(img, alpha)
-
-        self_cond = None
-        if random() < 0.5:
-            with torch.no_grad():
-                self_cond = self.model(noised_img, alpha).detach_()
+        cond_img = None
+        if self_conditioning and random() < 0.5:
+            with torch.no_grad(): #testare dopo con il gradiente
+                cond_img = self.model(img, alpha).detach_()
 
         # predict
-        pred = self.model(noised_img, alpha, self_cond)
+        pred = self.model(img, alpha, cond_img)
         
-        return pred, noised_img
+        return pred
 

@@ -10,7 +10,7 @@ def bernoulli_noise(img, alpha) -> torch.Tensor:
         The Bernulli noise can be applied only if the img is in the bit-wise representation
     Args:
         img (torch.Tensor): images to add noise to
-        alpha (torch.Tensor): the sqrt(alpha) is the variance of the gaussian noise
+        alpha (torch.Tensor): the sqrt(1-alpha) is the variance of the gaussian noise
 
     Returns:
         torch.Tensor: The noised images
@@ -18,8 +18,7 @@ def bernoulli_noise(img, alpha) -> torch.Tensor:
     assert alpha.shape[0]==img.shape[0], f'alpha must have the same size as the batch size of img, alpha has {alpha.shape[0]} and img has {img.shape[0]}'
     assert img.dtype==torch.bool, f'img must be in the bit-wise representation, img has dtype {img.dtype}'
 
-    sigma=torch.sqrt(torch.ones_like(alpha)-alpha)
-    p_flip=probability_quantum(sigma)
+    p_flip=probablity_flip_gaussian(alpha)
 
     bernulli_prob = torch.einsum("b, bchw -> bchw", p_flip, torch.ones_like(img))
     noise = torch.bernoulli(bernulli_prob).bool()
@@ -27,7 +26,7 @@ def bernoulli_noise(img, alpha) -> torch.Tensor:
     return img ^ noise
 
 def gaussian_noise(img, alpha):
-    """takes a batch of images and adds to each one of them a bernoulli noise.
+    """Takes a batch of images and adds to each one of them a gaussian.
         The gaussian noise can be applied only if the img is in the qubit representation
     Args:
         img (torch.Tensor): images to add noise to
@@ -39,15 +38,15 @@ def gaussian_noise(img, alpha):
     assert alpha.shape[0]==img.shape[0], f'alpha must have the same size as the batch size of img, alpha has {alpha.shape[0]} and img has {img.shape[0]}'
     assert img.dtype ==torch.float, f'img must be in the qubit representation, img has dtype {img.dtype}'
 
-    mu, s = torch.sqrt(alpha), torch.sqrt(1-alpha)
+    mu, sigma = torch.sqrt(alpha), torch.sqrt(1-alpha)
     noise = torch.randn_like(img)
     #       x*sqrt(alpha)                           +           noise*sqrt(1-alpha)
-    return torch.einsum("b, bchw -> bchw", mu, img) + torch.einsum("b, bchw -> bchw", s, noise)
+    return torch.einsum("b, bchw -> bchw", mu, img) + torch.einsum("b, bchw -> bchw", sigma, noise)
 
 
 #This part is for the scheduling of the alphas
 #TODO: check if this function is consistend with the reverse step definition
-def cosine_schedule(t:float ,t_max:float ):
+def cosine_schedule(t:float ,t_max:float, bits=BITS):
     """Calculates the alpha value for a given timestep, see eq. 17 of improved DDPM paper
 
     Args:
@@ -58,7 +57,7 @@ def cosine_schedule(t:float ,t_max:float ):
         float: alpha value
     """
 
-    s=1/BITS
+    s=1/bits
 
     #TODO: check if using the torch implementation for the cosine function is better
     return np.cos((t/t_max+s)/(1+s)*np.pi/2)**2
