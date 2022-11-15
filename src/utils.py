@@ -42,7 +42,6 @@ def decimal_to_qubits(x,bits=BITS):
     
     return decimal_to_binary(x,bits).float()-1/2
 
-#TODO: check if there is no floating point error
 def qubit_to_binary(x):
     return (qubit_collapse(x) + 1/2).bool()
 
@@ -69,7 +68,7 @@ def qubit_to_decimal(x, bits = BITS):
     dec = reduce(x * mask, 'b c d h w -> b c h w', 'sum')
     return (dec / 255).clamp(0., 1.)
 
-def theta_to_prob(theta, eps=1e-8):
+def theta_to_prob(theta):
     return torch.sin((theta+1/2)*np.pi/2)**2
 
 def qubit_collapse(x):
@@ -79,7 +78,7 @@ def cross_entropy(prediction,target):
     return -torch.mean(target*torch.log(prediction + 1e-8) + (1-target)*torch.log(1-prediction + 1e-8))
 
 
-def probability_quantum_gaussian(mu:torch.Tensor, sigma:torch.Tensor) -> torch.Tensor:
+def probability_quantum_gaussian(mu:torch.Tensor, sigma:torch.Tensor, k=1) -> torch.Tensor:
     """Given a gaussian distribution of probability of the angle of the qubit with mean mu and standard deviation sigma,
         returns the probability of the qubit being in the state |1>
 
@@ -89,27 +88,29 @@ def probability_quantum_gaussian(mu:torch.Tensor, sigma:torch.Tensor) -> torch.T
     Args:
         mu (torch.Tensor): mean of the gaussian distribution
         sigma (torch.Tensor): gaussian standard deviation
+        k (float): it is a parameter that changes the way the gaussian noise id added. Defaults to 1. 
 
     Returns:
         torch.Tensor: the probability of being in the state |1>
     """
-    sin=np.sin(2*mu)
-    return (1-np.exp(-2*sigma**2)*sin)/2
+    sin=np.sin(k*mu*np.pi)
+    return (1-np.exp(-np.pi**2*sigma**2*k**2/2)*sin)/2
 
-def probablity_flip_gaussian(alpha:torch.Tensor) -> torch.Tensor:
+def probablity_flip_gaussian(alpha:torch.Tensor,k=1) -> torch.Tensor:
     """TODO scrivere documentazione
 
     Args:
         alpha (torch.Tensor): _description_
+        k (float): it is a parameter that changes the way the gaussian noise id added. Defaults to 1. 
 
     Returns:
         torch.Tensor: spin flip probability
     """
 
-    mu=-np.pi/4*torch.sqrt(alpha)
+    mu=-torch.sqrt(alpha)/(2*k)
     sigma=torch.sqrt(torch.ones_like(alpha)-alpha)
 
-    return 1-probability_quantum_gaussian(mu,sigma)
+    return 1-probability_quantum_gaussian(mu,sigma,k)
 
 
 # old utils

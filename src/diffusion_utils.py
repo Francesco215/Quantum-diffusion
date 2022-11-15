@@ -5,12 +5,13 @@ import torch
 
 
 #this part is to add noise
-def bernoulli_noise(img, alpha) -> torch.Tensor:
+def bernoulli_noise(img:torch.Tensor, alpha:torch.Tensor, k:float=1) -> torch.Tensor:
     """takes a batch of images and adds to each one of them a bernoulli noise.
         The Bernulli noise can be applied only if the img is in the bit-wise representation
     Args:
         img (torch.Tensor): images to add noise to
         alpha (torch.Tensor): the sqrt(1-alpha) is the variance of the gaussian noise
+        k (float): it is a parameter that changes the way the gaussian noise id added. Defaults to 1. 
 
     Returns:
         torch.Tensor: The noised images
@@ -18,19 +19,20 @@ def bernoulli_noise(img, alpha) -> torch.Tensor:
     assert alpha.shape[0]==img.shape[0], f'alpha must have the same size as the batch size of img, alpha has {alpha.shape[0]} and img has {img.shape[0]}'
     assert img.dtype==torch.bool, f'img must be in the bit-wise representation, img has dtype {img.dtype}'
 
-    p_flip=probablity_flip_gaussian(alpha)
+    p_flip=probablity_flip_gaussian(alpha, k)
 
-    bernulli_prob = torch.einsum("b, bchw -> bchw", p_flip, torch.ones_like(img))
+    bernulli_prob = torch.einsum("b, b... -> b...", p_flip, torch.ones_like(img))
     noise = torch.bernoulli(bernulli_prob).bool()
 
     return img ^ noise
 
-def gaussian_noise(img, alpha):
+def gaussian_noise(img:torch.Tensor, alpha:torch.Tensor, k:float=1):
     """Takes a batch of images and adds to each one of them a gaussian.
         The gaussian noise can be applied only if the img is in the qubit representation
     Args:
         img (torch.Tensor): images to add noise to
         alpha (torch.Tensor): the sqrt(1-alpha) is the variance of the gaussian noise
+        k (float): it is a parameter that changes the way the gaussian noise id added. Defaults to 1. 
 
     Returns:
         torch.Tensor: The noised images
@@ -38,10 +40,11 @@ def gaussian_noise(img, alpha):
     assert alpha.shape[0]==img.shape[0], f'alpha must have the same size as the batch size of img, alpha has {alpha.shape[0]} and img has {img.shape[0]}'
     assert img.dtype ==torch.float, f'img must be in the qubit representation, img has dtype {img.dtype}'
 
-    mu, sigma = torch.sqrt(alpha), torch.sqrt(1-alpha)
+    mu, sigma = torch.sqrt(alpha), torch.sqrt(1-alpha)*k
+    
     noise = torch.randn_like(img)
     #       x*sqrt(alpha)                           +           noise*sqrt(1-alpha)
-    return torch.einsum("b, bchw -> bchw", mu, img) + torch.einsum("b, bchw -> bchw", sigma, noise)
+    return torch.einsum("b, b... -> b...", mu, img) + torch.einsum("b, b... -> b...", sigma, noise)
 
 
 #This part is for the scheduling of the alphas
