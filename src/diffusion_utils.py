@@ -38,14 +38,16 @@ def gaussian_noise(img:torch.Tensor, alpha:torch.Tensor, k:float=1):
         torch.Tensor: The noised images
     """
     assert alpha.shape[0]==img.shape[0], f'alpha must have the same size as the batch size of img, alpha has {alpha.shape[0]} and img has {img.shape[0]}'
-    assert img.dtype ==torch.float, f'img must be in the qubit representation, img has dtype {img.dtype}'
+    assert img.dtype == torch.float, f'img must be in the qubit representation, img has dtype {img.dtype}'
 
     mu, sigma = torch.sqrt(alpha), torch.sqrt(1-alpha)*k
-    
-    noise = torch.randn_like(img)
+
+    noise = torch.randn_like(img).to(img.device)
+    while torch.any(torch.isnan(noise)):
+        noise = torch.randn_like(img).to(img.device)
+
     #       x*sqrt(alpha)                           +           noise*sqrt(1-alpha)
     return torch.einsum("b, b... -> b...", mu, img) + torch.einsum("b, b... -> b...", sigma, noise)
-
 
 #This part is for the scheduling of the alphas
 #TODO: check if this function is consistend with the reverse step definition
