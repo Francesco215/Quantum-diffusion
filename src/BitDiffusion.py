@@ -24,6 +24,7 @@ class BitDiffusion(nn.Module):
     ):
         super().__init__()
         self.model = model
+        self.device = model.device
         self.channels = self.model.channels
 
         self.image_size = image_size
@@ -44,7 +45,7 @@ class BitDiffusion(nn.Module):
             torch.Tensor: the generated images
         """
 
-        return generate_from_noise(self.model,self.reverse_step, shape, self.timesteps, self.device)
+        return generate_from_noise(self.model,self.reverse_step, shape, self.timesteps, self.schedule, self.device)
 
 
 

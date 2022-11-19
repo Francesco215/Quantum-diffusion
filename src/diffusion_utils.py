@@ -69,7 +69,7 @@ def cosine_schedule(t:float ,t_max:float, bits=BITS):
 
 
 #this part is for the denoising
-def denoise_images(model, reverse_step_function, img, time, timesteps,schedule=None) -> torch.Tensor:
+def denoise_images(model, reverse_step_function, img, time, timesteps, schedule) -> torch.Tensor:
     """Generates an image from pure noise
 
     Args:
@@ -89,8 +89,6 @@ def denoise_images(model, reverse_step_function, img, time, timesteps,schedule=N
     """
     assert img.shape[1] == 3*BITS, f'channels must be {3*BITS}' #TODO: controllare che sia corretto
 
-    schedule=default(schedule,cosine_schedule)
-
     alpha_next=schedule(time,timesteps)*torch.ones(len(img)).to(img.device)
     for t in range(time,-1,-1):
         epsilon=model(img,alpha_next)
@@ -101,7 +99,7 @@ def denoise_images(model, reverse_step_function, img, time, timesteps,schedule=N
     return img
     
 # Utils for diffusion
-def generate_from_noise(model, reverse_step_function, shape, timesteps, schedule=None, device='cpu') -> torch.Tensor:
+def generate_from_noise(model, reverse_step_function, shape, timesteps, schedule, device) -> torch.Tensor:
     """Generates an image from pure noise
 
     Args:
@@ -149,7 +147,7 @@ def reverse_step(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_n
     mean = bmult(torch.sqrt( alpha_old/alpha_next ),x + dx)
     mean += bmult(torch.sqrt( 1 - sigma**2 - alpha_old ) , epsilon)
     #      mean + normal(mean=0,std=sigma, size=x.shape)
-    return mean + bmult(sigma, torch.normal(0, size=x.shape, device=x.device))
+    return mean + bmult(sigma, torch.normal(0, 1, size=x.shape, device=x.device))
 
 
 def reverse_DDIM(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_next:float) -> torch.Tensor:
