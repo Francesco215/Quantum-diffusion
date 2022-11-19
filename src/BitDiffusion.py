@@ -20,28 +20,17 @@ class BitDiffusion(nn.Module):
         schedule: Callable=cosine_schedule,
         timesteps: int=1000,
         reverse_step: Callable=reverse_DDIM,
-        time_difference=0.,
         collapsing: bool=True,
-        noise_fn: Callable=gaussian_noise,
     ):
         super().__init__()
         self.model = model
         self.channels = self.model.channels
 
         self.image_size = image_size
-        #self.schedule = schedule
+        self.schedule = schedule
         self.timesteps = timesteps
         self.collapsing = collapsing
-        self.noise_fn = noise_fn
         self.reverse_step = reverse_step
-
-        # proposed in the paper, summed to time_next
-        # as a way to fix a deficiency in self-conditioning and lower FID when the number of sampling timesteps is < 400
-        self.time_difference = time_difference
-
-    @property #is this useful?
-    def device(self):
-        return next(self.model.parameters()).device
 
     @torch.no_grad()
     def sample(self, shape):
@@ -55,7 +44,7 @@ class BitDiffusion(nn.Module):
             torch.Tensor: the generated images
         """
 
-        return generate_from_noise(self.model,self.reverse_step, shape, self.timesteps, self.schedule, self.device)
+        return generate_from_noise(self.model,self.reverse_step, shape, self.timesteps, self.device)
 
 
 

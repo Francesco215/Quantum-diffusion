@@ -21,7 +21,7 @@ def bernoulli_noise(img:torch.Tensor, alpha:torch.Tensor, k:float=1) -> torch.Te
 
     p_flip=probablity_flip_gaussian(alpha, k)
 
-    bernulli_prob = torch.einsum("b, b... -> b...", p_flip, torch.ones_like(img))
+    bernulli_prob = bmult(p_flip, torch.ones_like(img))
     noise = torch.bernoulli(bernulli_prob).bool()
 
     return img ^ noise
@@ -46,8 +46,8 @@ def gaussian_noise(img:torch.Tensor, alpha:torch.Tensor, k:float=1):
     while torch.any(torch.isnan(noise)):
         noise = torch.randn_like(img).to(img.device)
 
-    #       x*sqrt(alpha)                           +           noise*sqrt(1-alpha)
-    return torch.einsum("b, b... -> b...", mu, img) + torch.einsum("b, b... -> b...", sigma, noise)
+    #       x*sqrt(alpha) + noise*sqrt(1-alpha)
+    return bmult(mu, img) + bmult(sigma, noise)
 
 #This part is for the scheduling of the alphas
 #TODO: check if this function is consistend with the reverse step definition
@@ -91,15 +91,14 @@ def denoise_images(model, reverse_step_function, img, time, timesteps,schedule=N
 
     schedule=default(schedule,cosine_schedule)
 
-    alpha_next=schedule(time,timesteps)
-    x=img.clone()#.to(img.device)
+    alpha_next=schedule(time,timesteps)*torch.ones(len(img)).to(img.device)
     for t in range(time,-1,-1):
-        epsilon=model(x,t)
+        epsilon=model(img,alpha_next)
         alpha_old=alpha_next
-        alpha_next=schedule(t,timesteps)
-        x=reverse_step_function(x,epsilon,alpha_old,alpha_next)
+        alpha_next=schedule(t,timesteps)*torch.ones(len(img)).to(img.device)
+        img=reverse_step_function(img,epsilon,alpha_old,alpha_next)
 
-    return x
+    return img
     
 # Utils for diffusion
 def generate_from_noise(model, reverse_step_function, shape, timesteps, schedule=None, device='cpu') -> torch.Tensor:
@@ -121,13 +120,13 @@ def generate_from_noise(model, reverse_step_function, shape, timesteps, schedule
         torch.Tensor: The generated images
     """
 
-    x=torch.poisson(0.5*torch.ones(shape),device=device)
+    x=torch.poisson(0.5*torch.ones(shape)).to(device).float() - 0.5
     return denoise_images(model, reverse_step_function, x, timesteps, timesteps, schedule)
 
 
 
 #this part defines the reverse step
-def reverse_step(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_next:float ,sigma) -> torch.Tensor:
+def reverse_step(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_next:float ,sigma=0) -> torch.Tensor:
     """Does the reverse step, you must calculate the epsilon separatelly. It implements eq 12 of the DDIM paper
 
     Args:
@@ -135,19 +134,22 @@ def reverse_step(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_n
         epsilon (torch.tensor): prediction of the final image
         alpha_old (float): see eq 12 of DDIM paper
         alpha_next (float): see eq 12 of DDIM paper
-        sigma (int, optional): Noise of the reverse step,
-            if sigma==0 then it is a DDIM step,
-            if sigma==sqrt((1-alpha_old)/alpha_old) then it is a DDPM step.
+        sigma (int or torch.Tensor, optional): Noise of the reverse step,
+            if sigma = 0 then it is a DDIM step,
+            if sigma = sqrt((1-alpha_old)/alpha_old) then it is a DDPM step.
             Defaults to 0.
 
     Returns:
         torch.Tensor: reverse step
     """
-
-    mean = ( x - torch.sqrt( 1 - alpha_old )*epsilon ) * torch.sqrt( alpha_old/alpha_next )
-    mean += torch.sqrt( 1-alpha_old-sigma**2 ) * epsilon
-
-    return mean + torch.normal(0, sigma, size=x.shape, device=x.device)
+    #dx = -sqrt(1-alpha_old)*epsilon
+    dx = bmult(torch.sqrt( 1-alpha_old ), - epsilon)
+    
+    # mean = (x+dx)*sqrt(alpha_old/alpha_next) + epsilon*sqrt(1 - sigma**2 - alpha_old)
+    mean = bmult(torch.sqrt( alpha_old/alpha_next ),x + dx)
+    mean += bmult(torch.sqrt( 1 - sigma**2 - alpha_old ) , epsilon)
+    #      mean + normal(mean=0,std=sigma, size=x.shape)
+    return mean + bmult(sigma, torch.normal(0, size=x.shape, device=x.device))
 
 
 def reverse_DDIM(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_next:float) -> torch.Tensor:
@@ -176,5 +178,5 @@ def reverse_DDPM(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_n
     Returns:
         torch.Tensor: reverse step
     """
-    sigma=np.sqrt((1-alpha_old)/alpha_old)
+    sigma=torch.sqrt((1-alpha_old)/alpha_old)
     return reverse_step(x,epsilon,alpha_old,alpha_next,sigma)
