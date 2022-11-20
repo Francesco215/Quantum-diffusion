@@ -112,12 +112,20 @@ def probablity_flip_gaussian(alpha:torch.Tensor,k=1) -> torch.Tensor:
 
     return 1-probability_quantum_gaussian(mu,sigma,k)
 
-def bmult(batch_wise_vector,x):
-    
-    if type(batch_wise_vector)==float or type(batch_wise_vector)==int or len(batch_wise_vector)==1:
-        return batch_wise_vector*x
+def bmult(batch_wise_vector, tensor) -> torch.Tensor:
+    """Multiplies a vector for a tensor over the first dimention.
+       it is used for multiplying each batch for a different number
+    Args:
+        batch_wise_vector (torch.Tensor or float): vector or scalar
+        tensor (torch.Tensor): tensor
 
-    return torch.einsum("b,b...->b...",batch_wise_vector,x)
+    Returns:
+        torch.Tensor: tensor with the same dimentions of x
+    """
+    if type(batch_wise_vector)==float or type(batch_wise_vector)==int or len(batch_wise_vector)==1:
+        return batch_wise_vector*tensor
+
+    return torch.einsum("b,b...->b...",batch_wise_vector,tensor)
 
 # old utils
 def exists(x):

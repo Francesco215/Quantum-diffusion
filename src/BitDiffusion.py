@@ -24,7 +24,6 @@ class BitDiffusion(nn.Module):
     ):
         super().__init__()
         self.model = model
-        self.device = model.device
         self.channels = self.model.channels
 
         self.image_size = image_size
@@ -33,8 +32,12 @@ class BitDiffusion(nn.Module):
         self.collapsing = collapsing
         self.reverse_step = reverse_step
 
+    @property #is this useful?
+    def device(self):
+        return next(self.model.parameters()).device
+
     @torch.no_grad()
-    def sample(self, shape):
+    def sample(self, shape, timesteps=None):
         """Generates an image from pure noise
 
         Args:
@@ -44,20 +47,20 @@ class BitDiffusion(nn.Module):
         Returns:
             torch.Tensor: the generated images
         """
-
-        return generate_from_noise(self.model,self.reverse_step, shape, self.timesteps, self.schedule, self.device)
+        timesteps=default(timesteps,self.timesteps)
+        return generate_from_noise(self.model,self.reverse_step, shape, timesteps, self.schedule, self.device)
 
 
 
     def forward(self, img:torch.Tensor,
-                alpha:torch.Tensor,
+                noise_level:torch.Tensor,
                 self_conditioning:bool = False,
                 *args, **kwargs) -> torch.Tensor:
         """This is an estiamate of the target image
 
         Args:
             img (torch.Tensor): the image to do the prediction of the target image
-            alpha (torch.Tensor): noise applied to each image
+            noise (torch.Tensor): noise applied to each image. It can be calculated with probability_flip_gaussian()
             self_conditioning (bool, optional): wether or not to applu the self-conditioning to the algorithm. Defaults to False.
 
         Returns:
@@ -70,10 +73,10 @@ class BitDiffusion(nn.Module):
         cond_img = None
         if self_conditioning and random() < 0.5:
             with torch.no_grad(): #testare dopo con il gradiente
-                cond_img = self.model(img, alpha).detach_()
+                cond_img = self.model(img, noise_level).detach_()
 
         # predict
-        pred = self.model(img, alpha, cond_img)
+        pred = self.model(img, noise_level, cond_img)
         
         return pred
 
