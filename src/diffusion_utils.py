@@ -69,7 +69,7 @@ def cosine_schedule(t:float ,t_max:float, bits=BITS):
 
 
 #this part is for the denoising
-def denoise_images(model, reverse_step_function, img, time, timesteps, schedule, k) -> torch.Tensor:
+def denoise_images(model, reverse_step_function, img, time, timesteps, schedule, k, collapsing) -> torch.Tensor:
     """Generates an image from pure noise
 
     Args:
@@ -93,14 +93,18 @@ def denoise_images(model, reverse_step_function, img, time, timesteps, schedule,
     for t in range(time,-1,-1):
         noise_level=probablity_flip_gaussian(alpha_next, k)
         epsilon=model(img,noise_level)
+
         alpha_old=alpha_next
         alpha_next=schedule(t,timesteps)*torch.ones(len(img)).to(img.device)
+
         img=reverse_step_function(img,epsilon,alpha_old,alpha_next)
+        
+        if collapsing: img=qubit_collapse(img)
 
     return img
     
 # Utils for diffusion
-def generate_from_noise(model, reverse_step_function, shape, timesteps, schedule, device, k) -> torch.Tensor:
+def generate_from_noise(model, reverse_step_function, shape, timesteps, schedule, device, k, collapsing) -> torch.Tensor:
     """Generates an image from pure noise
 
     Args:
@@ -120,7 +124,7 @@ def generate_from_noise(model, reverse_step_function, shape, timesteps, schedule
     """
 
     x=torch.poisson(0.5*torch.ones(shape)).to(device).float() - 0.5
-    return denoise_images(model, reverse_step_function, x, timesteps, timesteps, schedule, k)
+    return denoise_images(model, reverse_step_function, x, timesteps, timesteps, schedule, k, collapsing)
 
 
 

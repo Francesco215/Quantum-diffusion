@@ -37,7 +37,7 @@ class BitDiffusion(nn.Module):
         return next(self.model.parameters()).device
 
     @torch.no_grad()
-    def sample(self, shape, timesteps=None):
+    def sample(self, shape, k,  timesteps=None):
         """Generates an image from pure noise
 
         Args:
@@ -48,8 +48,12 @@ class BitDiffusion(nn.Module):
             torch.Tensor: the generated images
         """
         timesteps=default(timesteps,self.timesteps)
-        return generate_from_noise(self.model,self.reverse_step, shape, timesteps, self.schedule, self.device)
+        return generate_from_noise(self.model,self.reverse_step, shape, timesteps, self.schedule, self.device, k, self.collapsing)
 
+    def denoise(self, image, k, time=None, timesteps=None):
+        timesteps=default(timesteps,self.timesteps)
+        time = default(time, timesteps)
+        return denoise_images(self.model, self.reverse_step, image, time, timesteps, self.schedule, k, self.collapsing)
 
 
     def forward(self, img:torch.Tensor,
@@ -74,6 +78,7 @@ class BitDiffusion(nn.Module):
         if self_conditioning and random() < 0.5:
             with torch.no_grad(): #testare dopo con il gradiente
                 cond_img = self.model(img, noise_level).detach_()
+                if self.collapsing: cond_img=qubit_collapse(cond_img)
 
         # predict
         pred = self.model(img, noise_level, cond_img)

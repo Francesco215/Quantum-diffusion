@@ -93,8 +93,8 @@ def probability_quantum_gaussian(mu:torch.Tensor, sigma:torch.Tensor, k=1) -> to
     Returns:
         torch.Tensor: the probability of being in the state |1>
     """
-    sin=np.sin(k*mu*np.pi)
-    return (1-np.exp(-np.pi**2*sigma**2*k**2/2)*sin)/2
+    sin=torch.sin(k*mu*np.pi)
+    return (1-torch.exp(-np.pi**2*sigma**2*k**2/2)*sin)/2
 
 def probablity_flip_gaussian(alpha:torch.Tensor,k=1) -> torch.Tensor:
     """TODO scrivere documentazione
