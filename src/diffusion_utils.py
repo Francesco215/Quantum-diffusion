@@ -87,8 +87,6 @@ def denoise_images(model, reverse_step_function, img, time, timesteps, schedule,
     Returns:
         torch.Tensor: The generated images
     """
-    assert img.shape[1] == 3*BITS, f'channels must be {3*BITS}' #TODO: controllare che sia corretto
-
     alpha_next=schedule(time,timesteps)*torch.ones(len(img)).to(img.device)
     for t in range(time,-1,-1):
         noise_level=probablity_flip_gaussian(alpha_next, k)

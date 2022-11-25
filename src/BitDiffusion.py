@@ -47,13 +47,21 @@ class BitDiffusion(nn.Module):
         Returns:
             torch.Tensor: the generated images
         """
+        assert len(shape) == 4, f'the images should have the four dimentions b,c,h,w, instead it has {len(shape)}'
+        assert shape[1] == 3*BITS, f'channels must be {3*BITS}' #TODO: controllare che sia corretto
+
         timesteps=default(timesteps,self.timesteps)
         return generate_from_noise(self.model,self.reverse_step, shape, timesteps, self.schedule, self.device, k, self.collapsing)
 
-    def denoise(self, image, k, time=None, timesteps=None):
+    #WIP
+    @torch.no_grad()
+    def denoise(self, images, k, time=None, timesteps=None):
+        assert len(images.shape) == 4, f'the images should have the four dimentions b,c,h,w, instead it has {len(images.shape)}'
+        assert images.shape[1] == 3*BITS, f'channels must be {3*BITS}' #TODO: controllare che sia corretto
+
         timesteps=default(timesteps,self.timesteps)
         time = default(time, timesteps)
-        return denoise_images(self.model, self.reverse_step, image, time, timesteps, self.schedule, k, self.collapsing)
+        return denoise_images(self.model, self.reverse_step, images, time, timesteps, self.schedule, k, self.collapsing)
 
 
     def forward(self, img:torch.Tensor,
@@ -71,7 +79,7 @@ class BitDiffusion(nn.Module):
             torch.Tensor: The predition of the target image
         """
 
-        batch, c, h, w, device, img_size, = *img.shape, img.device, self.image_size
+        _, _, h, w, img_size, = *img.shape, self.image_size
         assert h == img_size and w == img_size, f'height and width of image must be {img_size}'
 
         cond_img = None
