@@ -1,4 +1,6 @@
-from .utils import *
+from .utils import probablity_flip_gaussian, bmult, qubit_collapse, BITS
+import numpy as np
+
 import torch
 
 
@@ -93,12 +95,12 @@ def cosine_schedule(t:float ,t_max:float, bits=BITS):
 
 
 #this part is for the denoising
-def denoise_images(model, reverse_step_function, img, time, timesteps, schedule, k, collapsing) -> torch.Tensor:
+def denoise_images(model, reverse_step_function, x, time, timesteps, schedule, k, collapsing) -> torch.Tensor:
     """Generates an image from pure noise
 
     Args:
         model (nn.Module): the model to use for generation
-        img (torch.Tensor): the images to denoise (b,c,h,w) 
+        x (torch.Tensor): the images to denoise (b,c,h,w) 
             the first dimention is the batch
             the second dimention represents the channels, it must be equal to 3*BITS
             the third and fourth dimention represent the height and width of the image
@@ -111,19 +113,19 @@ def denoise_images(model, reverse_step_function, img, time, timesteps, schedule,
         torch.Tensor: The generated images
     """
     #TODO: check the last step
-    alpha_next=schedule(time,timesteps)*torch.ones(len(img)).to(img.device)
+    alpha_next=schedule(time,timesteps)*torch.ones(len(x)).to(x.device)
     for t in range(time,0,-1):
         noise_level=probablity_flip_gaussian(alpha_next, k)
-        epsilon=model(img,noise_level) #noise predicted by the model
+        x_0=model(x,noise_level)
 
         alpha_old=alpha_next
-        alpha_next=schedule(t,timesteps)*torch.ones(len(img)).to(img.device)
+        alpha_next=schedule(t,timesteps)*torch.ones(len(x)).to(x.device)
 
-        img=reverse_step_function(img,epsilon,alpha_old,alpha_next)
+        x=reverse_step_function(x, x_0, alpha_old, alpha_next)
         
-        if collapsing: img=qubit_collapse(img)
+        if collapsing: x=qubit_collapse(x)
 
-    return img
+    return x
 
 # Utils for diffusion
 def generate_from_noise(model, reverse_step_function, shape, timesteps, schedule, device, k, collapsing) -> torch.Tensor:
@@ -151,12 +153,12 @@ def generate_from_noise(model, reverse_step_function, shape, timesteps, schedule
 
 
 #this part defines the reverse step
-def reverse_step(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_next:float ,sigma:float ) -> torch.Tensor:
+def reverse_step(x: torch.tensor, x_0:torch.tensor, alpha_old:float, alpha_next:float, sigma:float) -> torch.Tensor:
     """Does the reverse step, you must calculate the epsilon separatelly. It implements eq 12 of the DDIM paper
 
     Args:
         x (torch.tensor): current state of the image
-        epsilon (torch.tensor): the noise predicted by the model
+        x_0 (torch.tensor): prediction of the original image
         alpha_old (float): see eq 12 of DDIM paper
         alpha_next (float): see eq 12 of DDIM paper
         sigma (int or torch.Tensor, optional): Noise of the reverse step,
@@ -167,36 +169,37 @@ def reverse_step(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_n
     Returns:
         torch.Tensor: reverse step
     """
-    #dx = -sqrt(1-alpha_old)*epsilon
-    dx = bmult(torch.sqrt( 1 - alpha_old ), - epsilon)
+    mean=bmult(torch.sqrt(alpha_next),x_0)
     
-    # mean = (x+dx)*sqrt(alpha_old/alpha_next) + epsilon*sqrt(1 - sigma**2 - alpha_old)
-    mean = bmult(torch.sqrt( alpha_old/alpha_next ),x + dx)
-    mean += bmult(torch.sqrt( 1 - sigma**2 - alpha_old ) , epsilon)
+    dx=x-bmult(torch.sqrt(alpha_old),x_0)
+    const=torch.sqrt((1-sigma**2-alpha_next)/(1-alpha_old))
+    
+    mean+=bmult(const,dx)
+
     #      mean + normal(mean=0,std=sigma, size=x.shape)
     return mean + bmult(sigma, torch.normal(0, 1, size=x.shape, device=x.device))
 
 
-def reverse_DDIM(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_next:float) -> torch.Tensor:
+def reverse_DDIM(x: torch.tensor, x_0:torch.tensor, alpha_old:float, alpha_next:float) -> torch.Tensor:
     """Calculates the reverse step. It implements eq 12 of the DDIM paper
 
     Args:
         x (torch.tensor): current state of the image
-        epsilon (torch.tensor): the noise predicted by the model
+        x_0 (torch.tensor): prediction of the original image
         alpha_old (float): see eq 12 of DDIM paper
         alpha_next (float): see eq 12 of DDIM paper
 
     Returns:
         torch.Tensor: reverse step
     """
-    return reverse_step(x,epsilon,alpha_old,alpha_next,0)
+    return reverse_step(x,x_0,alpha_old,alpha_next,0)
 
-def reverse_DDPM(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_next:float) -> torch.Tensor:
+def reverse_DDPM(x: torch.tensor, x_0:torch.tensor, alpha_old:float, alpha_next:float) -> torch.Tensor:
     """Calculates the reverse step. It implements eq 12 of the DDIM paper
 
     Args:
         x (torch.tensor): current state of the image
-        epsilon (torch.tensor): the noise predicted by the model
+        x_0 (torch.tensor): prediction of the original image
         alpha_old (float): see eq 12 of DDIM paper
         alpha_next (float): see eq 12 of DDIM paper
 
@@ -204,4 +207,4 @@ def reverse_DDPM(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_n
         torch.Tensor: reverse step
     """
     sigma=torch.sqrt((1-alpha_old)/alpha_old)
-    return reverse_step(x,epsilon,alpha_old,alpha_next,sigma)
+    return reverse_step(x,x_0,alpha_old,alpha_next,sigma)
