@@ -49,7 +49,24 @@ def gaussian_noise(img:torch.Tensor, alpha:torch.Tensor, k:float=1):
     #       x*sqrt(alpha) + noise*sqrt(1-alpha)
     return bmult(mu, img) + bmult(sigma, noise)
 
+
 #This part is for the scheduling of the alphas
+#TODO: check if this function is consistend with the reverse step definition
+def linear_schedule(t:float ,t_max:float, bits=BITS):
+    """Calculates the alpha value for a given timestep, see eq. 17 of improved DDPM paper
+
+    Args:
+        t (float): current timestep
+        t_max (float): total number of timesteps
+
+    Returns:
+        float: alpha value
+    """
+
+    s=1/bits
+
+    return (t/t_max+s)/(1+s)
+
 #TODO: check if this function is consistend with the reverse step definition
 def cosine_schedule(t:float ,t_max:float, bits=BITS):
     """Calculates the alpha value for a given timestep, see eq. 17 of improved DDPM paper
@@ -68,6 +85,13 @@ def cosine_schedule(t:float ,t_max:float, bits=BITS):
     return np.cos((t/t_max+s)/(1+s)*np.pi/2)**2
 
 
+
+
+
+
+
+
+
 #this part is for the denoising
 def denoise_images(model, reverse_step_function, img, time, timesteps, schedule, k, collapsing) -> torch.Tensor:
     """Generates an image from pure noise
@@ -78,19 +102,19 @@ def denoise_images(model, reverse_step_function, img, time, timesteps, schedule,
             the first dimention is the batch
             the second dimention represents the channels, it must be equal to 3*BITS
             the third and fourth dimention represent the height and width of the image
+        time (float): the current timestep
         timesteps (float): the number of total timesteps to count
-        sigma (int, optional): Noise of the reverse step,
-            if sigma==0 then it is a DDIM step,
-            if sigma==sqrt((1-alpha_old)/alpha_old) then it is a DDPM step.
-            Defaults to 0.
-        device (optional): the device to use
+        schedule (Callable): the function to use for the scheduling of the alphas
+        k (float): it is a parameter that changes the way the gaussian noise id added
+        collapsing (bool): if True then the qubits are collapsed after each timestep
     Returns:
         torch.Tensor: The generated images
     """
+    #TODO: check the last step
     alpha_next=schedule(time,timesteps)*torch.ones(len(img)).to(img.device)
-    for t in range(time,-1,-1):
+    for t in range(time,0,-1):
         noise_level=probablity_flip_gaussian(alpha_next, k)
-        epsilon=model(img,noise_level)
+        epsilon=model(img,noise_level) #noise predicted by the model
 
         alpha_old=alpha_next
         alpha_next=schedule(t,timesteps)*torch.ones(len(img)).to(img.device)
@@ -100,23 +124,23 @@ def denoise_images(model, reverse_step_function, img, time, timesteps, schedule,
         if collapsing: img=qubit_collapse(img)
 
     return img
-    
+
 # Utils for diffusion
 def generate_from_noise(model, reverse_step_function, shape, timesteps, schedule, device, k, collapsing) -> torch.Tensor:
     """Generates an image from pure noise
 
     Args:
         model (nn.Module): the model to use for generation
+        reverse_step_function (Callable): the function to use for the reverse step
         shape (float): the shape of the tensor to generate. (b,c,h,w)
             the first dimention is the batch
             the second dimention represents the channels, it must be equal to 3*BITS
             the third and fourth dimention represent the height and width of the image
         timesteps (float): the number of total timesteps to count
-        sigma (int, optional): Noise of the reverse step,
-            if sigma==0 then it is a DDIM step,
-            if sigma==sqrt((1-alpha_old)/alpha_old) then it is a DDPM step.
-            Defaults to 0.
-        device (optional): the device to use
+        schedule (Callable): the function to use for the scheduling of the alphas
+        device (torch.Device): the device to use
+        k (float): it is a parameter that changes the way the gaussian noise id added
+        collapsing (bool): if True then the qubits are collapsed after each timestep
     Returns:
         torch.Tensor: The generated images
     """
@@ -127,12 +151,12 @@ def generate_from_noise(model, reverse_step_function, shape, timesteps, schedule
 
 
 #this part defines the reverse step
-def reverse_step(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_next:float ,sigma=0) -> torch.Tensor:
+def reverse_step(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_next:float ,sigma:float ) -> torch.Tensor:
     """Does the reverse step, you must calculate the epsilon separatelly. It implements eq 12 of the DDIM paper
 
     Args:
         x (torch.tensor): current state of the image
-        epsilon (torch.tensor): prediction of the final image
+        epsilon (torch.tensor): the noise predicted by the model
         alpha_old (float): see eq 12 of DDIM paper
         alpha_next (float): see eq 12 of DDIM paper
         sigma (int or torch.Tensor, optional): Noise of the reverse step,
@@ -144,7 +168,7 @@ def reverse_step(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_n
         torch.Tensor: reverse step
     """
     #dx = -sqrt(1-alpha_old)*epsilon
-    dx = bmult(torch.sqrt( 1-alpha_old ), - epsilon)
+    dx = bmult(torch.sqrt( 1 - alpha_old ), - epsilon)
     
     # mean = (x+dx)*sqrt(alpha_old/alpha_next) + epsilon*sqrt(1 - sigma**2 - alpha_old)
     mean = bmult(torch.sqrt( alpha_old/alpha_next ),x + dx)
@@ -158,7 +182,7 @@ def reverse_DDIM(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_n
 
     Args:
         x (torch.tensor): current state of the image
-        epsilon (torch.tensor): prediction of the final image
+        epsilon (torch.tensor): the noise predicted by the model
         alpha_old (float): see eq 12 of DDIM paper
         alpha_next (float): see eq 12 of DDIM paper
 
@@ -172,7 +196,7 @@ def reverse_DDPM(x: torch.tensor, epsilon:torch.tensor, alpha_old:float, alpha_n
 
     Args:
         x (torch.tensor): current state of the image
-        epsilon (torch.tensor): prediction of the final image
+        epsilon (torch.tensor): the noise predicted by the model
         alpha_old (float): see eq 12 of DDIM paper
         alpha_next (float): see eq 12 of DDIM paper
 

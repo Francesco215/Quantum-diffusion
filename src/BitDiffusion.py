@@ -17,7 +17,7 @@ class BitDiffusion(nn.Module):
         model: nn.Module,
         *,  # ma a che serve sto asterisco?
         image_size,
-        schedule: Callable=cosine_schedule,
+        schedule: Callable=linear_schedule,
         timesteps: int=1000,
         reverse_step: Callable=reverse_DDIM,
         collapsing: bool=True,
