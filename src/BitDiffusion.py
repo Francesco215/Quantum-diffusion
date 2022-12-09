@@ -1,4 +1,4 @@
-from .utils import default, qubit_collapse
+from .utils import default, qubit_collapse, BITS
 from .diffusion_utils import denoise_images, generate_from_noise, linear_schedule, reverse_DDIM
 from random import random
 
@@ -8,7 +8,6 @@ from torch import nn
 
 from typing import Callable
 
-BITS = 8
 
 class BitDiffusion(nn.Module):
     def __init__(
@@ -16,7 +15,7 @@ class BitDiffusion(nn.Module):
         model: nn.Module,
         *,  # ma a che serve sto asterisco?
         image_size,
-        schedule: Callable=linear_schedule,
+        schedule_function: Callable=linear_schedule,
         timesteps: int=1000,
         reverse_step: Callable=reverse_DDIM,
         collapsing: bool=True,
@@ -26,10 +25,14 @@ class BitDiffusion(nn.Module):
         self.channels = self.model.channels
 
         self.image_size = image_size
-        self.schedule = schedule
+        self.schedule_function = schedule_function
         self.timesteps = timesteps
         self.collapsing = collapsing
         self.reverse_step = reverse_step
+
+    def schedule(self, t: int, timesteps=None) -> float:
+        timesteps = default(timesteps, self.timesteps)
+        return self.schedule_function(t, timesteps)
 
     @property #is this useful?
     def device(self):
@@ -54,19 +57,35 @@ class BitDiffusion(nn.Module):
 
     #WIP
     @torch.no_grad()
-    def denoise(self, images, k, time=None, timesteps=None):
+    def denoise(self, images: torch.Tensor,
+                k:float,
+                time:float=None,
+                timesteps:float=None,
+                self_conditioning:bool=None) -> torch.Tensor:
+        """Denoises the images 
+
+        Args:
+            images (torch.Tensor): images to denoise   
+            k (float): 
+            time (float, optional): time passed in the noising process
+            timesteps (float, optional): total number of timesteps. Defaults to self.timesteps
+
+        Returns:
+            torch.Tensor: Denoised images
+        """
         assert len(images.shape) == 4, f'the images should have the four dimentions b,c,h,w, instead it has {len(images.shape)}'
         assert images.shape[1] == 3*BITS, f'channels must be {3*BITS}' #TODO: controllare che sia corretto
 
         timesteps=default(timesteps,self.timesteps)
         time = default(time, timesteps)
-        return denoise_images(self.model, self.reverse_step, images, time, timesteps, self.schedule, k, self.collapsing)
+        self_conditioning = default(self_conditioning, self.self_conditioning)
+        return denoise_images(self.forward, self.reverse_step, images, time, timesteps, self.schedule, k, self.collapsing,self_conditioning)
 
 
     def forward(self, img:torch.Tensor,
                 noise_level:torch.Tensor,
-                self_conditioning:bool = False,
-                *args, **kwargs) -> torch.Tensor:
+                self_conditioning:bool = False
+                ) -> torch.Tensor:
         """This is an estiamate of the target image
 
         Args:
@@ -88,7 +107,7 @@ class BitDiffusion(nn.Module):
                 if self.collapsing: cond_img=qubit_collapse(cond_img)
 
         # predict
-        pred = self.model(img, noise_level, cond_img)
+        pred = self.model(cond_img, noise_level, img)
         
         return pred
 

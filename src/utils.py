@@ -5,6 +5,9 @@ import torch.nn.functional as F
 from einops import rearrange, reduce
 
 import numpy as np
+from matplotlib import pyplot as plt
+from torchvision.utils import make_grid
+
 
 BITS = 8
 
@@ -132,6 +135,11 @@ def default(val, d):
     if exists(val):
         return val
     return d() if callable(d) else d
+
+# functions to show an image
+def imshow(img):
+    plt.imshow(make_grid(img[:4]).cpu().detach().permute(1,2,0))
+    plt.show()
 
 
 def num_to_groups(num, divisor):
