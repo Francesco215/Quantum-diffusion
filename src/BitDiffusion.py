@@ -107,7 +107,7 @@ class BitDiffusion(nn.Module):
                 if self.collapsing: cond_img=qubit_collapse(cond_img)
 
         # predict
-        pred = self.model(cond_img, noise_level, img)
+        pred = self.model(img, noise_level, cond_img)
         
         return pred
 
